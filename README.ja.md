@@ -2,6 +2,16 @@
 
 # Rebocap × Linux × WiVRn フルボディトラッキング（VRChat）
 
+> [!WARNING]
+> **レシーバーのファームウェアを v8 に更新すると、使えるのは構成 A（公式 Linux 版）だけになります。**
+> 構成 B（Wine）が使えるのは、レシーバーのファームウェアが **v7 以前**の場合だけです。
+>
+> 公式の[更新履歴](https://doc.rebocap.com/zh-Hans/docs/tutorial/software_install/)（2026-11-11）によると、レシーバーのファームウェア V8 は CDC シリアルドライバーをやめて vendor モードに変わりました。
+> 更新後は最新版のソフトしかレシーバーを認識できず、古いソフトを使うにはレシーバーのファームウェアを戻す必要があります。
+> 構成 B はすべてシリアルポート（`/dev/ttyACM*` → Wine の COM ポート）に頼っており、v8 にはシリアルポートがないため、構成 B ではつながりません。
+> 構成 B を使い続けたい場合は、レシーバーを更新しないでください（ファームウェア更新画面では、レシーバーとトラッカーは別々に更新します）。
+> 動かすためのアイデアは[構成 B の説明](#v8-で構成-b-を使うには)を参照してください。
+
 Linux で **Rebocap** の慣性式フルボディトラッキングを **VRChat** につなぎます。SteamVR は使わず **WiVRn + xrizer** を通し、
 ヘッドセットは Meta Quest です。
 
@@ -20,6 +30,7 @@ SolarXR のトラッカーに変換し、WiVRn に送ります。
 | CLI との接続 | Rebocap 自身が TCP `127.0.0.1:20480` で待ち受け | `bridge.exe` が Wine 内で名前付きパイプを TCP `127.0.0.1:36850` に変換 |
 | 必要なもの | Rebocap、CLI、このリポジトリ | Rebocap、Bottles、rebocap-wine パッチ、bridge.exe、CLI、このリポジトリ |
 | トラッカーのファームウェア | 公式アプリで更新できる（v15 から v17 にしたら安定した気がします） | Wine 上では更新しない |
+| レシーバーのファームウェア | v7、v8 どちらでも可 | **v7 以前のみ**。v8 は使えない |
 
 構成 A は Wine・パッチ・bridge.exe の 3 層がなくなり、起動も終了もずっと簡単です。公式版があなたの PC で動かない場合を除き、A を使ってください。
 構成 B は予備として、また最初にどうつないだかの記録として残しています。
@@ -44,7 +55,7 @@ Rebocap トラッカー → Rebocap → bridge.exe → CLI → SolarXR → WiVRn
 | ヘッドセット | Meta Quest、WiVRn（Wi-Fi または USB） |
 | WiVRn | wivrn-server / wivrn-dashboard 26.9 |
 | xrizer | xrizer-git 0.6.r6（rebocap-wivrn-bridge の作者は 0.5 で確認。0.6 でも問題なし） |
-| Rebocap（構成 A） | 公式 Linux 版 `rebocap-linux-preview-0.1-1`、トラッカーのファームウェア v17 |
+| Rebocap（構成 A） | 公式 Linux 版 `rebocap-linux-preview-0.1-1`、トラッカーのファームウェア v17、レシーバーのファームウェア v7 |
 | Rebocap（構成 B） | Windows 版を Flatpak 版 **Bottles** で実行、runner は soda-11.0-10（ntsync あり）、トラッカーのファームウェア v15 |
 | トラッカー | 普段は 10 点：腰、胸、両上腿、両下腿、両足、両上腕（前腕に付けていた分を下腿に回しました）。テストでは 6 点：腰、両上腿、両下腿、胸 |
 
@@ -100,8 +111,18 @@ ln -s ~/Projects/rebocap-linux-wivrn-fbt/scripts/rebocap-fbt ~/.local/bin/reboca
    ```
    そのあと再ログインし、レシーバーを挿し直してください。
 3. Rebocap を開き、トラッカーのファームウェア更新を求められたら更新します。**更新中はレシーバーを抜かず、アプリも閉じないでください。**
+   レシーバーのファームウェア v8 は構成 A には影響しませんが、更新すると構成 B は使えなくなります（冒頭の警告を参照）。
+   公式の注意：トラッカーとレシーバーを同時に更新しないこと。レシーバーの更新後は USB を挿し直し、ソフトを再起動すること。
 4. 公式の SteamVR ドライバー（`data/rebocap_driver`）は**入れないでください**。SteamVR は使いませんし、ポート 20480 は同時に
    1 つしか接続を受け付けないため、SteamVR ドライバーがつながっていると CLI が接続できません。
+5. Rebocap はこのリポジトリの `rebocap-launch` で起動するのがおすすめです。デスクトップによっては（たとえば Omarchy）、
+   アプリメニューから開いた Rebocap が 1 秒後に終了してしまいます。このスクリプトでそれを避けられます（理由は「ハマったところ」を参照）。
+   ```sh
+   ln -s ~/Projects/rebocap-linux-wivrn-fbt/scripts/rebocap-launch ~/.local/bin/rebocap-launch
+   sed -i "s|^Exec=.*|Exec=$HOME/.local/bin/rebocap-launch|" ~/.local/share/applications/rebocap.desktop
+   ```
+   スクリプトは `REBOCAP_NO_DESKTOP_INTEGRATION=1` を設定します。これがないと、Rebocap が起動のたびに `rebocap.desktop` を書き直し、
+   `Exec=` を元に戻してしまいます。Rebocap を `~/.local/opt/rebocap` 以外に入れた場合は、`REBOCAP_APP` で `rebocap-ui` のパスを指定してください。
 
 Bottles、rebocap-wine、bridge.exe はどれも不要です。
 
@@ -109,6 +130,9 @@ Bottles、rebocap-wine、bridge.exe はどれも不要です。
 > `/dev/serial/by-id/...` は消えます。これは正常な動作で、スクリプトは USB デバイス 248a:8002 を直接探すようにしています。
 
 ### 構成 B：Windows 版を Wine（Bottles）で動かす
+
+> [!IMPORTANT]
+> レシーバーのファームウェアが **v7 以前**の場合だけです。v8 のレシーバーでは構成 A を使ってください。
 
 #### B1. レシーバーの権限
 
@@ -145,6 +169,18 @@ cp bridge.exe ~/.var/app/com.usebottles.bottles/data/bottles/bottles/Rebocap/dri
 `install.py` の実行や SteamVR ドライバーの登録は**不要**です。
 
 Bottles の GUI で `bridge.exe` をそのボトルのプログラムとして追加しておくと、毎回の起動が楽です。
+
+#### v8 で構成 B を使うには
+
+私は試しておらず、テストもしていません。以下はアイデアだけです。ぜひ試してみてください。動いたら PR も歓迎します。
+
+1. **レシーバーのファームウェアを v7 に戻す**：公式の説明では、レシーバーのファームウェアは戻せるとされています。いちばん簡単で、確実に動く方法です。
+2. **最新版の Windows 版 Rebocap を Wine で動かす**（V02 Beta02.1 以降が v8 に対応）：vendor モードでは Windows 版が USB デバイスに
+   直接アクセスするため、Wine では USB パススルー（wineusb.sys + libusb、それに WinUSB の実装）が必要です。Wine のこの部分はまだ不完全で、
+   独自の USB デバイスは動かないことがよくあります。Flatpak 版 Bottles では、USB デバイスへのアクセス権も別途必要です。
+3. **Linux 側に変換プログラムを書く**：libusb で v8 のレシーバーを読み、仮想シリアルポート（pty）をボトルの COM ポートに割り当てて、
+   古い Rebocap に渡します。難しいのは、公式が古いソフトは v8 を「認識できない」としている点です。変わったのは通信方式だけでなく、
+   データ形式もかもしれません。そうなると改めて解析が必要で、レシーバーのファームウェアが更新されるたびに壊れる可能性もあります。
 
 ### （任意）右スティック押し込み＝ジャンプ
 
@@ -268,6 +304,9 @@ CLI に届くまでの差は 2 つの構成でごくわずかです。構成 A �
 | スクリプトがレシーバーが見つからないと言うが、Rebocap は認識している | 公式版がレシーバーを `cdc_acm` から外して USB を直接使うため、`/dev/ttyACM*` が消える | スクリプトは USB デバイス 248a:8002 を探すように対応済み |
 | CLI はつながるがデータが来ない | Rebocap がまだ VR モードでない、またはファームウェア更新中 | 更新が終わるのを待ち、VR モードにしてキャリブレーションする |
 | スクリプトが 20480 に別のプログラムが接続中だと警告する | 公式の SteamVR ドライバー（または別の CLI）がポートを使っている。このポートは 1 接続のみ | SteamVR／別の CLI を閉じる |
+| アプリメニュー（Omarchy の Super+Space）から開いた Rebocap が、ウィンドウが出て 1 秒後に終了する。端末から開くと問題ない。クラッシュの記録はなく、ログは `[linux-rt] realtime=ok` で止まっている | Rebocap はレシーバーのスレッドをリアルタイムスケジューリング（`SCHED_FIFO`。`pkexec` 経由で公式の `rebocap-set-rt` を呼ぶ）に切り替えます。Omarchy のメニューは Quickshell 上で動いており、Quickshell の `RLIMIT_RTTIME`（リアルタイムスレッドの CPU 時間の上限）は 0 で、メニューから起動したアプリはすべてこれを引き継ぎます。スレッドがリアルタイムになった瞬間に上限を超え、カーネルが SIGXCPU を送り、Rebocap は自分で正常終了します | `rebocap-launch` で起動する（構成 A の手順 5）。上限が unlimited でない場合、Rebocap を systemd のユーザーマネージャー（`systemd-run --user`）から起動します。ハードリミットが 0 だとアプリ自身では上げられないため、この回り道が必要です。プロセスの上限は `grep 'realtime timeout' /proc/<PID>/limits` で確認できます |
+| `rebocap.desktop` の `Exec=` を書き換えても元に戻る | Rebocap が起動のたびに自分の desktop ファイルを書き直す | 環境変数 `REBOCAP_NO_DESKTOP_INTEGRATION=1` で止める（`rebocap-launch` が設定済み） |
+| 構成 B でレシーバーが見つからなくなった | レシーバーのファームウェアが v8 になり、シリアルポートではなくなった | 構成 A を使うか、レシーバーを v7 に戻す |
 
 ### 構成 B（Wine／Bottles）
 

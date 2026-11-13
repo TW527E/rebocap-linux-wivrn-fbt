@@ -2,6 +2,14 @@
 
 # Rebocap × Linux × WiVRn 全身追踪（VRChat）
 
+> [!WARNING]
+> **接收器固件升级到 v8 之后，只能用方案 A（官方 Linux 版）。**
+> 方案 B（Wine）只能用在接收器固件 **v7 及以下**。
+>
+> 官方[更新日志](https://doc.rebocap.com/zh-Hans/docs/tutorial/software_install/)（2026-11-11）写明：接收器固件 V8 不再用 CDC 串口驱动，改用 vendor 模式；升级后只有最新版软件认得到，旧版软件要把接收器固件降回去才能用。
+> 方案 B 整条路都建立在串口（`/dev/ttyACM*` → Wine 的 COM 端口）上，v8 没有串口，所以 B 就接不上了。
+> 想继续用 B 的话，先不要升级接收器（固件更新窗口里，接收器和追踪器是分开更新的）。修复思路见[方案 B 里的说明](#想在-v8-上用方案-b)。
+
 在 Linux 上把 **Rebocap** 惯性动捕的全身追踪接到 **VRChat**。不用 SteamVR，走 **WiVRn + xrizer**，头显是 Meta Quest。
 
 Rebocap 官方已经出了 Linux 版，但它只附 **SteamVR 驱动**。如果你用 SteamVR，装官方版就够了，不需要这个仓库。这个仓库是给**不用 SteamVR、改用 WiVRn** 的人：用 CLI 把 Rebocap 的追踪器转成 SolarXR，送进 WiVRn。
@@ -17,6 +25,7 @@ Rebocap 官方已经出了 Linux 版，但它只附 **SteamVR 驱动**。如果�
 | 和 CLI 之间 | Rebocap 自己开 TCP `127.0.0.1:20480` | `bridge.exe` 在 Wine 里把 named pipe 转成 TCP `127.0.0.1:36850` |
 | 需要的东西 | Rebocap、CLI、本仓库 | Rebocap、Bottles、rebocap-wine 补丁、bridge.exe、CLI、本仓库 |
 | 追踪器固件 | 可以用官方版更新（我从 v15 升到 v17，感觉更稳） | 不要在 Wine 里更新 |
+| 接收器固件 | v7、v8 都可以 | **只能 v7 及以下**，v8 不能用 |
 
 方案 A 少了 Wine、补丁和 bridge.exe 三层，启动和关闭也简单很多，除非官方版在你的电脑上跑不起来，不然请用 A。方案 B 留着当备案，也记录当初怎么接通的。
 
@@ -40,7 +49,7 @@ Rebocap 追踪器 → Rebocap → bridge.exe → CLI → SolarXR → WiVRn → x
 | 头显 | Meta Quest，WiVRn（WiFi 或 USB） |
 | WiVRn | wivrn-server / wivrn-dashboard 26.9 |
 | xrizer | xrizer-git 0.6.r6（rebocap-wivrn-bridge 作者测试的是 0.5，0.6 也正常） |
-| Rebocap（方案 A） | 官方 Linux 版 `rebocap-linux-preview-0.1-1`，追踪器固件 v17 |
+| Rebocap（方案 A） | 官方 Linux 版 `rebocap-linux-preview-0.1-1`，追踪器固件 v17，接收器固件 v7 |
 | Rebocap（方案 B） | Windows 版，在 Flatpak **Bottles** 里运行，runner 是 soda-11.0-10（有 ntsync），追踪器固件 v15 |
 | 追踪器 | 平常 10 点：腰、胸、双大腿、双小腿、双脚、双上臂（原本绑双前臂，用不到就改成小腿）。测试时用 6 点：腰、双大腿、双小腿、胸 |
 
@@ -92,13 +101,23 @@ ln -s ~/Projects/rebocap-linux-wivrn-fbt/scripts/rebocap-fbt ~/.local/bin/reboca
    ```
    之后重新登录，并重插接收器。
 3. 开 Rebocap，有提示更新追踪器固件就照着更新。**更新中不要拔接收器、不要关程序。**
+   接收器固件 v8 对方案 A 没有影响，但升级之后就不能再用方案 B（见最上面的警告）。官方提醒：追踪器和接收器不要同时更新；接收器更新完要拔插 USB，再重开软件。
 4. **不要**装官方的 SteamVR 驱动（`data/rebocap_driver`）。我们不用 SteamVR，而且 20480 这个端口同一时间只能连一个程序，SteamVR 驱动连着的话 CLI 就连不上。
+5. 建议改用本仓库的 `rebocap-launch` 启动 Rebocap。有些桌面（例如 Omarchy）从应用菜单打开 Rebocap 时，它会在一秒后自己关掉，这个脚本可以避开（原因见「踩过的坑」）：
+   ```sh
+   ln -s ~/Projects/rebocap-linux-wivrn-fbt/scripts/rebocap-launch ~/.local/bin/rebocap-launch
+   sed -i "s|^Exec=.*|Exec=$HOME/.local/bin/rebocap-launch|" ~/.local/share/applications/rebocap.desktop
+   ```
+   脚本会设置 `REBOCAP_NO_DESKTOP_INTEGRATION=1`，不然 Rebocap 每次启动都会重写 `rebocap.desktop`，把 `Exec=` 改回去。Rebocap 不是装在 `~/.local/opt/rebocap` 的话，用 `REBOCAP_APP` 指定 `rebocap-ui` 的路径。
 
 Bottles、rebocap-wine、bridge.exe 都不需要。
 
 > 官方版运行时会把接收器从 `cdc_acm` 卸下来，直接用 USB 访问，所以这时 `/dev/ttyACM*` 和 `/dev/serial/by-id/...` 会消失。这是正常的，脚本改成直接找 USB 设备 248a:8002。
 
 ### 方案 B：Windows 版跑在 Wine（Bottles）
+
+> [!IMPORTANT]
+> 只适用于接收器固件 **v7 及以下**。接收器升到 v8 就只能用方案 A。
 
 #### B1. 接收器权限
 
@@ -135,6 +154,14 @@ cp bridge.exe ~/.var/app/com.usebottles.bottles/data/bottles/bottles/Rebocap/dri
 **不需要**运行它的 `install.py`，也不用注册 SteamVR 驱动。
 
 建议在 Bottles GUI 里把 `bridge.exe` 加成这个 Bottle 的程序，方便日常启动。
+
+#### 想在 v8 上用方案 B？
+
+我没有做，也没有测试，下面只是思路。欢迎自己尝试，修好了也欢迎发 PR：
+
+1. **把接收器固件降回 v7**：官方说明里提到可以回退接收器固件。这是最简单、也确定可行的做法。
+2. **在 Wine 里跑最新版 Windows Rebocap**（V02 Beta02.1 以后支持 v8）：v8 是 vendor 模式，Windows 版要直接访问 USB 设备，在 Wine 里得靠 USB 直通（wineusb.sys + libusb，以及 WinUSB 的实现）。Wine 这部分还不完整，自定义 USB 设备常常跑不起来；Flatpak Bottles 也要额外给 USB 设备访问权限。
+3. **在 Linux 这边写一个转换程序**：用 libusb 读 v8 接收器，再开一个虚拟串口（pty）映射成 Bottle 里的 COM 端口给旧版 Rebocap。难点是旧版软件「无法识别」v8，可能不只是传输方式变了，数据格式也可能不同，需要重新逆向；而且每次接收器固件更新都可能坏掉。
 
 ### （选用）右摇杆按下 = 跳跃
 
@@ -252,6 +279,9 @@ cd ~/Projects/rebocap-linux-wivrn-fbt && git pull                         # 启�
 | 脚本说找不到接收器，但 Rebocap 能识别 | 官方版把接收器从 `cdc_acm` 卸下来直接用 USB，`/dev/ttyACM*` 会消失 | 脚本已改成找 USB 设备 248a:8002 |
 | CLI 连上了但一直没有数据 | Rebocap 还没切 VR 模式，或正在更新固件 | 等固件更新完，切 VR 模式并校准 |
 | 脚本警告 20480 已经有程序连着 | 官方 SteamVR 驱动（或另一个 CLI）占着，这个端口只收一个连接 | 关掉 SteamVR／另一个 CLI |
+| 从应用菜单（Omarchy 的 Super+Space）打开 Rebocap，窗口出现一秒后就关掉；从终端开却正常。没有崩溃记录，日志停在 `[linux-rt] realtime=ok` | Rebocap 会把接收器线程设成实时调度（`SCHED_FIFO`，通过 `pkexec` 调用官方的 `rebocap-set-rt`）。Omarchy 的菜单跑在 Quickshell 里，Quickshell 的 `RLIMIT_RTTIME`（实时线程的 CPU 时间上限）是 0，从菜单开的程序都会继承。线程一变成实时就立刻「超时」，内核发出 SIGXCPU，Rebocap 收到后自己正常退出 | 用 `rebocap-launch` 启动（见方案 A 第 5 步）。上限不是 unlimited 时，它改由 systemd 用户管理器（`systemd-run --user`）启动 Rebocap。硬上限是 0 时程序自己调不回来，只能这样绕开。用 `grep 'realtime timeout' /proc/<PID>/limits` 可以看某个进程的上限 |
+| 改了 `rebocap.desktop` 的 `Exec=`，下次又变回原样 | Rebocap 每次启动都会重写自己的 desktop 文件 | 用环境变量 `REBOCAP_NO_DESKTOP_INTEGRATION=1` 关掉（`rebocap-launch` 已设置） |
+| 方案 B 认不到接收器了 | 接收器固件升到了 v8，不再是串口 | 用方案 A，或把接收器降回 v7 |
 
 ### 方案 B（Wine／Bottles）
 

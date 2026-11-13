@@ -1,0 +1,25 @@
+#!/bin/bash
+# Launch the official Rebocap Linux app (set REBOCAP_APP if it is installed elsewhere).
+#
+# The Omarchy shell (Quickshell) runs with RLIMIT_RTTIME=0, and apps started from
+# its menu (Super+Space) inherit that limit. Rebocap switches its receiver threads
+# to SCHED_FIFO, the kernel then sends SIGXCPU, and Rebocap quits about one second
+# after starting. A hard limit of 0 cannot be raised again, so in that case start
+# Rebocap from the systemd user manager, which uses the normal (unlimited) limit.
+APP="${REBOCAP_APP:-$HOME/.local/opt/rebocap/rebocap-ui}"
+
+# Rebocap rewrites ~/.local/share/applications/rebocap.desktop on every start and
+# would reset Exec= back to rebocap-ui, dropping this launcher. Turn that off.
+export REBOCAP_NO_DESKTOP_INTEGRATION=1
+
+if [ "$(ulimit -R)" = unlimited ]; then
+    exec "$APP" "$@"
+fi
+
+env_args=()
+for v in REBOCAP_NO_DESKTOP_INTEGRATION XDG_ACTIVATION_TOKEN DESKTOP_STARTUP_ID WAYLAND_DISPLAY DISPLAY; do
+    [ -n "${!v}" ] && env_args+=(--setenv="$v=${!v}")
+done
+exec systemd-run --user --quiet --collect --slice=app-graphical.slice \
+    --unit="app-rebocap-$(date +%s%N)" --description=Rebocap \
+    -p LimitRTTIME=infinity "${env_args[@]}" -- "$APP" "$@"

@@ -2,6 +2,18 @@
 
 # Rebocap × Linux × WiVRn full-body tracking (VRChat)
 
+> [!WARNING]
+> **After updating the receiver firmware to v8, only setup A (the official Linux version) works.**
+> Setup B (Wine) works only with receiver firmware **v7 or earlier**.
+>
+> Rebocap's [changelog](https://doc.rebocap.com/zh-Hans/docs/tutorial/software_install/) (2026-11-11) says receiver
+> firmware V8 drops the CDC serial driver for vendor mode. After the update only the latest software recognizes the
+> receiver; older software needs the receiver firmware rolled back.
+> Setup B depends on the serial port at every step (`/dev/ttyACM*` → a Wine COM port), and v8 has no serial port, so
+> setup B can't connect.
+> If you want to keep using B, don't update the receiver (the firmware window updates the receiver and the trackers
+> separately). For ideas on making it work, see [the note in setup B](#using-setup-b-with-v8).
+
 Connect **Rebocap** inertial full-body tracking to **VRChat** on Linux, without SteamVR, through **WiVRn + xrizer**,
 with a Meta Quest headset.
 
@@ -21,6 +33,7 @@ with its fix.
 | Link to the CLI | Rebocap itself listens on TCP `127.0.0.1:20480` | `bridge.exe` turns the named pipe into TCP `127.0.0.1:36850` inside Wine |
 | What you need | Rebocap, the CLI, this repository | Rebocap, Bottles, the rebocap-wine patch, bridge.exe, the CLI, this repository |
 | Tracker firmware | Can be updated with the official app (I went from v15 to v17 and it feels more stable) | Don't update under Wine |
+| Receiver firmware | v7 or v8 | **v7 or earlier only**; v8 doesn't work |
 
 Setup A drops three layers (Wine, the patch and bridge.exe) and is much simpler to start and stop. Use A unless the
 official version doesn't run on your machine. Setup B stays as a fallback and as a record of how it was first made to work.
@@ -46,7 +59,7 @@ setup A, otherwise it looks for bridge.exe on 36850.
 | Headset | Meta Quest, WiVRn (Wi-Fi or USB) |
 | WiVRn | wivrn-server / wivrn-dashboard 26.9 |
 | xrizer | xrizer-git 0.6.r6 (the rebocap-wivrn-bridge author tested 0.5; 0.6 works too) |
-| Rebocap (setup A) | Official Linux version `rebocap-linux-preview-0.1-1`, tracker firmware v17 |
+| Rebocap (setup A) | Official Linux version `rebocap-linux-preview-0.1-1`, tracker firmware v17, receiver firmware v7 |
 | Rebocap (setup B) | Windows version in Flatpak **Bottles**, runner soda-11.0-10 (with ntsync), tracker firmware v15 |
 | Trackers | Usually 10: waist, chest, both upper legs, both lower legs, both feet, both upper arms (the forearm trackers moved to the lower legs). For testing, 6: waist, both upper legs, both lower legs, chest |
 
@@ -103,8 +116,19 @@ elsewhere, or other paths differ, override them with `REBOCAP_CLI`, `REBOCAP_BOT
    ```
    Then log in again and replug the receiver.
 3. Open Rebocap and update the tracker firmware if it asks. **Don't unplug the receiver or close the app during the update.**
+   Receiver firmware v8 doesn't affect setup A, but after that update setup B no longer works (see the warning at
+   the top). Rebocap advises: don't update the trackers and the receiver at the same time, and after a receiver
+   update, replug it and restart the app.
 4. **Don't** install the official SteamVR driver (`data/rebocap_driver`). We don't use SteamVR, and port 20480 takes
    only one client at a time, so a connected SteamVR driver would lock out the CLI.
+5. Start Rebocap with this repository's `rebocap-launch`. On some desktops (Omarchy, for example) Rebocap opened from
+   the app menu quits after one second; the script avoids that (see "Problems and fixes" for why):
+   ```sh
+   ln -s ~/Projects/rebocap-linux-wivrn-fbt/scripts/rebocap-launch ~/.local/bin/rebocap-launch
+   sed -i "s|^Exec=.*|Exec=$HOME/.local/bin/rebocap-launch|" ~/.local/share/applications/rebocap.desktop
+   ```
+   The script sets `REBOCAP_NO_DESKTOP_INTEGRATION=1`; otherwise Rebocap rewrites `rebocap.desktop` on every start
+   and resets `Exec=`. If Rebocap isn't in `~/.local/opt/rebocap`, point `REBOCAP_APP` at its `rebocap-ui`.
 
 Bottles, rebocap-wine and bridge.exe are not needed.
 
@@ -112,6 +136,9 @@ Bottles, rebocap-wine and bridge.exe are not needed.
 > `/dev/ttyACM*` and `/dev/serial/by-id/...` disappear. That's expected; the launcher looks for USB device 248a:8002 instead.
 
 ### Setup B: Windows version in Wine (Bottles)
+
+> [!IMPORTANT]
+> Only for receiver firmware **v7 or earlier**. With a v8 receiver, use setup A.
 
 #### B1. Receiver permissions
 
@@ -148,6 +175,21 @@ If you'd rather not compile it, download `bridge.exe` from [Releases](https://gi
 You **don't** need its `install.py` or the SteamVR driver.
 
 Adding `bridge.exe` to the bottle as a program in the Bottles GUI makes it easy to start every day.
+
+#### Using setup B with v8
+
+I haven't done or tested any of this; these are only ideas. Feel free to try, and PRs are welcome if you get it working:
+
+1. **Roll the receiver back to v7.** Rebocap's notes say the receiver firmware can be rolled back. This is the
+   simplest option and the only one known to work.
+2. **Run the latest Windows Rebocap in Wine** (V02 Beta02.1 and later support v8). In vendor mode the Windows app
+   talks to the USB device directly, which in Wine needs USB passthrough (wineusb.sys + libusb, plus a WinUSB
+   implementation). That part of Wine is incomplete and custom USB devices often don't work. Flatpak Bottles also
+   needs USB device access.
+3. **Write a converter on the Linux side.** Read the v8 receiver with libusb and expose a virtual serial port (pty),
+   mapped to a COM port in the bottle, to the old Rebocap. The catch: Rebocap says old software "can't recognize"
+   v8, so the data format may have changed too, not only the transport. That means more reverse engineering, and any
+   receiver firmware update could break it.
 
 ### (Optional) Right stick click = jump
 
@@ -275,6 +317,9 @@ waited in two 10 ms polling loops, adding about 10 ms on average (up to ~20 ms) 
 | The launcher says the receiver is missing, but Rebocap sees it | The official app detaches the receiver from `cdc_acm` and uses USB directly, so `/dev/ttyACM*` disappears | The launcher now looks for USB device 248a:8002 |
 | The CLI connects but never gets data | Rebocap isn't in VR mode yet, or is updating firmware | Wait for the update to finish, switch to VR mode and calibrate |
 | The launcher warns that something is already connected to 20480 | The official SteamVR driver (or another CLI) holds the port, which accepts one client | Close SteamVR / the other CLI |
+| Rebocap opened from the app menu (Super+Space on Omarchy) quits one second after its window appears, but works from a terminal. No crash is recorded, and the log stops at `[linux-rt] realtime=ok` | Rebocap switches its receiver threads to real-time scheduling (`SCHED_FIFO`, through `pkexec` and the official `rebocap-set-rt`). Omarchy's menu runs in Quickshell, whose `RLIMIT_RTTIME` (the CPU time limit for real-time threads) is 0, and every app started from the menu inherits it. As soon as a thread becomes real-time it is over the limit, the kernel sends SIGXCPU, and Rebocap exits cleanly | Start it with `rebocap-launch` (setup A, step 5). When the limit isn't unlimited, it starts Rebocap from the systemd user manager (`systemd-run --user`) instead. A hard limit of 0 can't be raised by the app itself, so this detour is needed. `grep 'realtime timeout' /proc/<PID>/limits` shows a process's limit |
+| `Exec=` in `rebocap.desktop` changes back after you edit it | Rebocap rewrites its own desktop file on every start | Turn it off with `REBOCAP_NO_DESKTOP_INTEGRATION=1` (`rebocap-launch` sets it) |
+| Setup B no longer finds the receiver | The receiver firmware was updated to v8, which has no serial port | Use setup A, or roll the receiver back to v7 |
 
 ### Setup B (Wine / Bottles)
 
