@@ -1,6 +1,8 @@
-# 除錯紀錄
+# 除錯紀錄（方案 B：Wine／Bottles）
 
 這是實際接通的過程中，每個問題的症狀、我是怎麼確認原因的，以及最後的解法。
+
+> 這份是方案 B（Windows 版 Rebocap 跑在 Bottles）的紀錄。用官方 Linux 版（方案 A）的話，這裡的問題都不會遇到。
 
 環境是 Rebocap 跑在 Flatpak Bottles 裡（runner soda-11.0-10，系統有 `/dev/ntsync`），WiVRn 26.9，xrizer 0.6。
 

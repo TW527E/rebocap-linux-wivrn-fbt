@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # rebocap-fbt: start the Rebocap -> WiVRn bridge CLI (monad2steamvr) for VRChat full-body tracking.
 #
-# Rebocap and bridge.exe are started by the user from Bottles. This script checks that they are up,
-# runs the CLI with the right OpenXR runtime, shows only useful messages, and on Ctrl+C stops the CLI
-# and asks bridge.exe to exit through its bridge.quit file. It never kills Wine processes and never
-# touches Rebocap or the WiVRn server.
+# Two ways to reach Rebocap:
+#   native: the official Linux Rebocap, which listens on 127.0.0.1:20480 itself (no Wine, no bridge.exe)
+#   wine:   Rebocap in Bottles plus bridge.exe, which listens on 127.0.0.1:36850
+# The mode is picked from whichever port is listening (native first) unless --native/--wine is given.
+# This script checks that Rebocap is up, runs the CLI with the right OpenXR runtime, shows only useful
+# messages, and on Ctrl+C stops the CLI. In wine mode it also asks bridge.exe to exit through its
+# bridge.quit file. It never kills Rebocap or Wine processes and never touches the WiVRn server.
 #
-# usage: rebocap-fbt [12|10|6|ROLES] [--usb] [--keep-bridge] [--yaw DEG] [--offset X,Y,Z]
+# usage: rebocap-fbt [12|10|6|ROLES] [--native|--wine] [--usb] [--keep-bridge] [--yaw DEG] [--offset X,Y,Z]
 
 set -u
 
@@ -15,7 +18,8 @@ BOTTLE="${REBOCAP_BOTTLE:-$HOME/.var/app/com.usebottles.bottles/data/bottles/bot
 APP_DIR="$BOTTLE/drive_c/Program Files (x86)/Rebocap"
 XR_JSON="${REBOCAP_XR_RUNTIME_JSON:-/usr/share/openxr/1/openxr_wivrn.json}"
 RECEIVER="${REBOCAP_RECEIVER:-/dev/serial/by-id/usb-JXQ_Ltd__Co_RebornBodyCap_RebornRX-if00}"
-BRIDGE_PORT=36850
+NATIVE_PORT="${REBOCAP_NATIVE_PORT:-20480}" # official Linux Rebocap (its REBOCAP_BRIDGE_PORT)
+WINE_PORT="${REBOCAP_WINE_PORT:-36850}"     # bridge.exe default
 LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/rebocap-fbt"
 
 # Finds the CLI (monad2steamvr): $REBOCAP_CLI, then PATH (cargo install), then a rebocap-wivrn-bridge
@@ -62,13 +66,17 @@ usage() {
                 0 腰  1/2 大腿  3/4 小腿  5/6 腳  7 胸  9/10 上臂  11/12 前臂
 
 選項:
-  --usb         SolarXR 準備好後，透過 adb 讓頭顯用 USB 連 WiVRn
-  --keep-bridge 結束時不要關閉 bridge.exe
+  --native      只用官方 Linux 版 Rebocap（127.0.0.1:20480）
+  --wine        只用 Bottles 裡的 Rebocap + bridge.exe（127.0.0.1:36850）
+                兩個都不給時自動偵測，官方 Linux 版優先
+  --usb       SolarXR 準備好後，透過 adb 讓頭顯用 USB 連 WiVRn
+  --keep-bridge 結束時不要關閉 bridge.exe（只影響 Wine 模式）
   --yaw DEG     輸出方向修正（度）
   --offset X,Y,Z 輸出位置修正（公尺）
   -h, --help    顯示說明
 
-開始前：WiVRn 伺服器開著（頭顯先不要連），並在 Bottles 開好 Rebocap 與 bridge.exe。
+開始前：WiVRn 伺服器開著（頭顯先不要連），並開好 Rebocap
+（官方 Linux 版；或 Bottles 裡的 Rebocap 加 bridge.exe）。
 結束：按 Ctrl+C。Rebocap 請照平常關閉視窗。
 EOF
 }
@@ -81,6 +89,7 @@ notify() { command -v notify-send >/dev/null && notify-send -a rebocap-fbt "Rebo
 roles="$PRESET_10"
 usb=0
 keep_bridge=0
+mode=auto
 extra=()
 
 while [ $# -gt 0 ]; do
@@ -88,6 +97,8 @@ while [ $# -gt 0 ]; do
         12) roles="$PRESET_12" ;;
         10 | full) roles="$PRESET_10" ;;
         6) roles="$PRESET_6" ;;
+        --native) mode=native ;;
+        --wine) mode=wine ;;
         --usb) usb=1 ;;
         --keep-bridge) keep_bridge=1 ;;
         --yaw) [ $# -ge 2 ] || die "--yaw 需要一個數值"; extra+=(--solarxr-yaw "$2"); shift ;;
@@ -108,15 +119,47 @@ done
 [ -f "$XR_JSON" ] || die "找不到 WiVRn 的 OpenXR runtime 檔：$XR_JSON"
 [ -n "${XDG_RUNTIME_DIR:-}" ] || die "沒有 XDG_RUNTIME_DIR，請在桌面工作階段的終端機執行"
 
-[ -e "$RECEIVER" ] || warn "找不到 Rebocap 接收器（$RECEIVER），請確認有插上"
+# The official Linux Rebocap detaches cdc_acm and talks USB directly, so the serial node disappears
+# while it runs. Look for the USB device (248a:8002) as well.
+receiver_present() {
+    [ -e "$RECEIVER" ] && return 0
+    local d
+    for d in /sys/bus/usb/devices/*; do
+        [ "$(cat "$d/idVendor" 2>/dev/null):$(cat "$d/idProduct" 2>/dev/null)" = 248a:8002 ] && return 0
+    done
+    return 1
+}
+receiver_present || warn "找不到 Rebocap 接收器（USB 248a:8002），請確認有插上"
 
 [ -S "$XDG_RUNTIME_DIR/wivrn/comp_ipc" ] ||
     die "WiVRn 伺服器沒有在執行。請開 WiVRn（wivrn-dashboard）並按「啟動伺服器」，頭顯先不要連"
 
 pgrep -x monad2steamvr >/dev/null && die "已經有一個 CLI（monad2steamvr）在執行，請先關掉它"
 
-ss -Hltn "sport = :$BRIDGE_PORT" | grep -q . ||
-    die "bridge.exe 沒有在監聽 127.0.0.1:$BRIDGE_PORT。請先在 Bottles 開 Rebocap，再開 bridge.exe"
+listening() { ss -Hltn "sport = :$1" | grep -q .; }
+
+if [ $mode = auto ]; then
+    if listening "$NATIVE_PORT"; then
+        mode=native
+    elif listening "$WINE_PORT"; then
+        mode=wine
+    else
+        die "找不到 Rebocap：127.0.0.1:$NATIVE_PORT（官方 Linux 版）和 127.0.0.1:$WINE_PORT（bridge.exe）都沒有在監聽。請先開 Rebocap"
+    fi
+fi
+
+if [ $mode = native ]; then
+    BRIDGE_PORT=$NATIVE_PORT
+    listening "$BRIDGE_PORT" ||
+        die "官方 Linux 版 Rebocap 沒有在監聽 127.0.0.1:$BRIDGE_PORT。請先開 Rebocap"
+    # Rebocap accepts one client on this port; a connected SteamVR driver would block the CLI.
+    ss -Htn state established "dport = :$BRIDGE_PORT" | grep -q . &&
+        warn "已經有程式連在 127.0.0.1:$BRIDGE_PORT（SteamVR 驅動？），CLI 可能連不上"
+else
+    BRIDGE_PORT=$WINE_PORT
+    listening "$BRIDGE_PORT" ||
+        die "bridge.exe 沒有在監聽 127.0.0.1:$BRIDGE_PORT。請先在 Bottles 開 Rebocap，再開 bridge.exe"
+fi
 
 if [ $usb -eq 1 ]; then
     command -v adb >/dev/null || die "--usb 需要 adb（android-tools）"
@@ -128,6 +171,10 @@ mkdir -p "$LOG_DIR"
 log="$LOG_DIR/cli-$(date +%Y%m%d-%H%M%S).log"
 ls -1t "$LOG_DIR"/cli-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f # keep the last 10 logs
 
+case $mode in
+    native) say "模式：官方 Linux 版 Rebocap（127.0.0.1:$BRIDGE_PORT）" ;;
+    wine) say "模式：Bottles 的 Rebocap + bridge.exe（127.0.0.1:$BRIDGE_PORT）" ;;
+esac
 say "部位：$roles"
 say "完整 log：$log"
 
@@ -188,7 +235,7 @@ filter_stderr() {
 }
 
 # stderr first: a process substitution inherits the redirections made before it.
-XR_RUNTIME_JSON="$XR_JSON" "$CLI" --solarxr --tracker-roles "$roles" "${extra[@]}" \
+XR_RUNTIME_JSON="$XR_JSON" "$CLI" --bridge "127.0.0.1:$BRIDGE_PORT" --solarxr --tracker-roles "$roles" "${extra[@]}" \
     2> >(filter_stderr) > >(python3 -I -u -c "$MONITOR" "$roles") &
 cli=$!
 
@@ -204,11 +251,11 @@ cleanup() {
         kill -0 "$cli" 2>/dev/null && kill -TERM "$cli" 2>/dev/null
     fi
     wait "$cli" 2>/dev/null
-    if [ $keep_bridge -eq 0 ] && ss -Hltn "sport = :$BRIDGE_PORT" | grep -q .; then
+    if [ $mode = wine ] && [ $keep_bridge -eq 0 ] && listening "$BRIDGE_PORT"; then
         say "要求 bridge.exe 結束…"
         touch "$APP_DIR/bridge.quit"
-        for _ in $(seq 30); do ss -Hltn "sport = :$BRIDGE_PORT" | grep -q . || break; sleep 0.2; done
-        if ss -Hltn "sport = :$BRIDGE_PORT" | grep -q .; then
+        for _ in $(seq 30); do listening "$BRIDGE_PORT" || break; sleep 0.2; done
+        if listening "$BRIDGE_PORT"; then
             warn "bridge.exe 沒有回應，請在 Bottles 用「強制停止」，不要從終端機 kill 它"
         fi
     fi
