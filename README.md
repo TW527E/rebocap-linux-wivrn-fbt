@@ -1,63 +1,65 @@
-# Rebocap × Linux × WiVRn 全身追蹤（VRChat）
+**简体中文** · [繁體中文](README.zh-TW.md) · [English](README.en.md) · [日本語](README.ja.md)
 
-在 Linux 上把 **Rebocap** 慣性動捕的全身追蹤接到 **VRChat**。不用 SteamVR，走 **WiVRn + xrizer**，頭顯是 Meta Quest。
+# Rebocap × Linux × WiVRn 全身追踪（VRChat）
 
-Rebocap 官方已經出了 Linux 版，但它只附 **SteamVR 驅動**。如果你用 SteamVR，裝官方版就夠了，不需要這個 repo。這個 repo 是給**不用 SteamVR、改用 WiVRn** 的人：用 CLI 把 Rebocap 的追蹤器轉成 SolarXR，送進 WiVRn。
+在 Linux 上把 **Rebocap** 惯性动捕的全身追踪接到 **VRChat**。不用 SteamVR，走 **WiVRn + xrizer**，头显是 Meta Quest。
 
-這份紀錄包括實際環境、從零開始的安裝步驟、日常怎麼玩，以及途中遇到的每一個坑和解法。
+Rebocap 官方已经出了 Linux 版，但它只附 **SteamVR 驱动**。如果你用 SteamVR，装官方版就够了，不需要这个仓库。这个仓库是给**不用 SteamVR、改用 WiVRn** 的人：用 CLI 把 Rebocap 的追踪器转成 SolarXR，送进 WiVRn。
 
-## 兩種方案
+这份记录包括实际环境、从零开始的安装步骤、日常怎么玩，以及途中遇到的每一个坑和解法。
 
-| | **A. 官方 Linux 版（推薦）** | B. Windows 版跑在 Wine（Bottles） |
+## 两种方案
+
+| | **A. 官方 Linux 版（推荐）** | B. Windows 版跑在 Wine（Bottles） |
 |---|---|---|
-| Rebocap | 官方 Linux 原生程式 | Windows 版裝在 Bottles |
-| 接收器 | 官方程式直接用 USB | Wine 的 COM 埠 + setupapi 補丁 |
-| 和 CLI 之間 | Rebocap 自己開 TCP `127.0.0.1:20480` | `bridge.exe` 在 Wine 裡把 named pipe 轉成 TCP `127.0.0.1:36850` |
-| 需要的東西 | Rebocap、CLI、本 repo | Rebocap、Bottles、rebocap-wine 補丁、bridge.exe、CLI、本 repo |
-| 追蹤器韌體 | 可以用官方版更新（我從 v15 升到 v17，感覺更穩） | — |
+| Rebocap | 官方 Linux 原生程序 | Windows 版装在 Bottles |
+| 接收器 | 官方程序直接用 USB | Wine 的 COM 端口 + setupapi 补丁 |
+| 和 CLI 之间 | Rebocap 自己开 TCP `127.0.0.1:20480` | `bridge.exe` 在 Wine 里把 named pipe 转成 TCP `127.0.0.1:36850` |
+| 需要的东西 | Rebocap、CLI、本仓库 | Rebocap、Bottles、rebocap-wine 补丁、bridge.exe、CLI、本仓库 |
+| 追踪器固件 | 可以用官方版更新（我从 v15 升到 v17，感觉更稳） | 不要在 Wine 里更新 |
 
-方案 A 少了 Wine、補丁和 bridge.exe 三層，啟動和關閉也簡單很多，除非官方版在你的電腦上跑不起來，不然請用 A。方案 B 留著當備案，也記錄當初怎麼接通的。
+方案 A 少了 Wine、补丁和 bridge.exe 三层，启动和关闭也简单很多，除非官方版在你的电脑上跑不起来，不然请用 A。方案 B 留着当备案，也记录当初怎么接通的。
 
 ```
 方案 A：
-Quest 頭顯 → WiVRn → CLI ⇄ Rebocap（Linux 原生，:20480）
-Rebocap 追蹤器 → Rebocap → CLI → SolarXR → WiVRn → xrizer → VRChat
+Quest 头显 → WiVRn → CLI ⇄ Rebocap（Linux 原生，:20480）
+Rebocap 追踪器 → Rebocap → CLI → SolarXR → WiVRn → xrizer → VRChat
 
 方案 B：
-Quest 頭顯 → WiVRn → CLI ⇄ bridge.exe（Wine，:36850）⇄ Rebocap（Wine）
-Rebocap 追蹤器 → Rebocap → bridge.exe → CLI → SolarXR → WiVRn → xrizer → VRChat
+Quest 头显 → WiVRn → CLI ⇄ bridge.exe（Wine，:36850）⇄ Rebocap（Wine）
+Rebocap 追踪器 → Rebocap → bridge.exe → CLI → SolarXR → WiVRn → xrizer → VRChat
 ```
 
-啟動腳本 `rebocap-fbt` 兩種方案都支援，會自動偵測：20480 有在監聽就用方案 A，沒有再找 36850 的 bridge.exe。
+启动脚本 `rebocap-fbt` 两种方案都支持，会自动检测：20480 在监听就用方案 A，没有再找 36850 的 bridge.exe。
 
-## 實測環境
+## 实测环境
 
-| 項目 | 版本／設定 |
+| 项目 | 版本／设置 |
 |---|---|
-| 系統 | Arch Linux（Omarchy，Hyprland），NVIDIA RTX 3070 |
-| 頭顯 | Meta Quest，WiVRn（WiFi 或 USB） |
+| 系统 | Arch Linux（Omarchy，Hyprland），NVIDIA RTX 3070 |
+| 头显 | Meta Quest，WiVRn（WiFi 或 USB） |
 | WiVRn | wivrn-server / wivrn-dashboard 26.9 |
-| xrizer | xrizer-git 0.6.r6（rebocap-wivrn-bridge 作者測試的是 0.5，0.6 也正常） |
-| Rebocap（方案 A） | 官方 Linux 版 `rebocap-linux-preview-0.1-1`，追蹤器韌體 v17 |
-| Rebocap（方案 B） | Windows 版，在 Flatpak **Bottles** 裡執行，runner 是 soda-11.0-10（有 ntsync），追蹤器韌體 v15 |
-| 追蹤器 | 平常 10 點：腰、胸、雙大腿、雙小腿、雙腳、雙上臂（原本綁雙前臂，用不到就改成小腿）。測試時用 6 點：腰、雙大腿、雙小腿、胸 |
+| xrizer | xrizer-git 0.6.r6（rebocap-wivrn-bridge 作者测试的是 0.5，0.6 也正常） |
+| Rebocap（方案 A） | 官方 Linux 版 `rebocap-linux-preview-0.1-1`，追踪器固件 v17 |
+| Rebocap（方案 B） | Windows 版，在 Flatpak **Bottles** 里运行，runner 是 soda-11.0-10（有 ntsync），追踪器固件 v15 |
+| 追踪器 | 平常 10 点：腰、胸、双大腿、双小腿、双脚、双上臂（原本绑双前臂，用不到就改成小腿）。测试时用 6 点：腰、双大腿、双小腿、胸 |
 
-## 用到的專案
+## 用到的项目
 
-| 專案 | 用途 | 方案 |
+| 项目 | 用途 | 方案 |
 |---|---|---|
-| [TW527E/rebocap-wivrn-bridge](https://github.com/TW527E/rebocap-wivrn-bridge) | CLI（`monad2steamvr`）：在 WiVRn 和 Rebocap 之間轉送頭部與追蹤器姿勢，用 SolarXR 發布追蹤器。fork 自 [akazdayo/rebocap-wivrn-bridge](https://github.com/akazdayo/rebocap-wivrn-bridge)，加了 WiVRn 遊玩區移動的修正（libmonado），並拿掉追蹤器轉送時兩段 10 ms 的輪詢等待（平均少約 10 ms 延遲） | A、B |
-| 本 repo | 啟動腳本 `rebocap-fbt`、VRChat 按鍵綁定產生器、這份紀錄 | A、B |
-| [TW527E/rebocap-wine](https://github.com/TW527E/rebocap-wine) | setupapi 補丁，讓 Rebocap 在 Wine 裡認得接收器 | B |
-| [TW527E/rebocap-linux-compat](https://github.com/TW527E/rebocap-linux-compat) | `bridge.exe`：在 Wine 裡把 Rebocap 的 named pipe 轉成 TCP。fork 自 [dogesoulseller/rebocap-linux-compat](https://github.com/dogesoulseller/rebocap-linux-compat)，加了 Bottles/ntsync 修正 | B |
+| [TW527E/rebocap-wivrn-bridge](https://github.com/TW527E/rebocap-wivrn-bridge) | CLI（`monad2steamvr`）：在 WiVRn 和 Rebocap 之间转发头部与追踪器姿势，用 SolarXR 发布追踪器。fork 自 [akazdayo/rebocap-wivrn-bridge](https://github.com/akazdayo/rebocap-wivrn-bridge)，加了 WiVRn 游玩区移动的修正（libmonado），并拿掉追踪器转发时两段 10 ms 的轮询等待（平均少约 10 ms 延迟） | A、B |
+| 本仓库 | 启动脚本 `rebocap-fbt`、VRChat 按键绑定生成器、这份记录 | A、B |
+| [TW527E/rebocap-wine](https://github.com/TW527E/rebocap-wine) | setupapi 补丁，让 Rebocap 在 Wine 里识别接收器 | B |
+| [TW527E/rebocap-linux-compat](https://github.com/TW527E/rebocap-linux-compat) | `bridge.exe`：在 Wine 里把 Rebocap 的 named pipe 转成 TCP。fork 自 [dogesoulseller/rebocap-linux-compat](https://github.com/dogesoulseller/rebocap-linux-compat)，加了 Bottles/ntsync 修正 | B |
 
-## 安裝（從零開始）
+## 安装（从零开始）
 
-先完成「共同步驟」，再依你選的方案做 A 或 B。
+先完成「共同步骤」，再按你选的方案做 A 或 B。
 
-### 共同 1. WiVRn 與 xrizer
+### 共同 1. WiVRn 与 xrizer
 
-照 WiVRn 的說明裝好 wivrn-server、wivrn-dashboard，以及 xrizer，確認不開全追時 VRChat 能正常用。
+按 WiVRn 的说明装好 wivrn-server、wivrn-dashboard，以及 xrizer，确认不开全追时 VRChat 能正常用。
 
 ### 共同 2. CLI
 
@@ -67,57 +69,57 @@ git clone https://github.com/TW527E/rebocap-wivrn-bridge ~/Projects/rebocap-wivr
 cd ~/Projects/rebocap-wivrn-bridge && cargo build --release
 ```
 
-### 共同 3. 啟動腳本
+### 共同 3. 启动脚本
 
 ```sh
 git clone https://github.com/TW527E/rebocap-linux-wivrn-fbt ~/Projects/rebocap-linux-wivrn-fbt
 ln -s ~/Projects/rebocap-linux-wivrn-fbt/scripts/rebocap-fbt ~/.local/bin/rebocap-fbt
 ```
 
-腳本會自動找 CLI（`monad2steamvr`），依序是：`REBOCAP_CLI`、`PATH`、跟這個 repo 放在同一層的 `rebocap-wivrn-bridge`，以及 `~/Projects`、`~/Downloads`、`~/src`、`~/` 底下的 `rebocap-wivrn-bridge`。放在其他地方，或其他路徑不同時，可以用環境變數覆寫：`REBOCAP_CLI`、`REBOCAP_BOTTLE`、`REBOCAP_RECEIVER`、`REBOCAP_XR_RUNTIME_JSON`。埠號可以用 `REBOCAP_NATIVE_PORT`（預設 20480）和 `REBOCAP_WINE_PORT`（預設 36850）改。
+脚本会自动找 CLI（`monad2steamvr`），依次是：`REBOCAP_CLI`、`PATH`、跟这个仓库放在同一层的 `rebocap-wivrn-bridge`，以及 `~/Projects`、`~/Downloads`、`~/src`、`~/` 底下的 `rebocap-wivrn-bridge`。放在其他地方，或其他路径不同时，可以用环境变量覆盖：`REBOCAP_CLI`、`REBOCAP_BOTTLE`、`REBOCAP_RECEIVER`、`REBOCAP_XR_RUNTIME_JSON`。端口号可以用 `REBOCAP_NATIVE_PORT`（默认 20480）和 `REBOCAP_WINE_PORT`（默认 36850）改。
 
-### 方案 A：官方 Linux 版（推薦）
+### 方案 A：官方 Linux 版（推荐）
 
-1. 依[官方安裝說明](https://doc.rebocap.com/zh-Hans/docs/tutorial/software_install)下載 Linux 版安裝檔並執行：
+1. 依[官方安装说明](https://doc.rebocap.com/zh-Hans/docs/tutorial/software_install)下载 Linux 版安装包并运行：
    ```sh
    chmod +x rebocap-linux-preview-*.run
    ./rebocap-linux-preview-*.run
    ```
-   我裝在 `~/.local/opt/rebocap`，從應用程式選單開 Rebocap，或執行 `~/.local/opt/rebocap/rebocap-ui`。
-2. 給接收器權限。官方附了腳本，會寫入 `/etc/udev/rules.d/70-rebocap.rules`，並把你加進 `dialout`／`uucp`／`plugdev` 其中一個群組（Arch 是 `uucp`）：
+   我装在 `~/.local/opt/rebocap`，从应用程序菜单开 Rebocap，或运行 `~/.local/opt/rebocap/rebocap-ui`。
+2. 给接收器权限。官方附了脚本，会写入 `/etc/udev/rules.d/70-rebocap.rules`，并把你加进 `dialout`／`uucp`／`plugdev` 其中一个组（Arch 是 `uucp`）：
    ```sh
    sudo bash ~/.local/opt/rebocap/linux/install_linux_permissions.sh --install --user "$USER"
    ```
-   之後重新登入，並重插接收器。
-3. 開 Rebocap，有提示更新追蹤器韌體就照著更新。**更新中不要拔接收器、不要關程式。**
-4. **不要**裝官方的 SteamVR 驅動（`data/rebocap_driver`）。我們不用 SteamVR，而且 20480 這個埠同一時間只能連一個程式，SteamVR 驅動連著的話 CLI 就連不上。
+   之后重新登录，并重插接收器。
+3. 开 Rebocap，有提示更新追踪器固件就照着更新。**更新中不要拔接收器、不要关程序。**
+4. **不要**装官方的 SteamVR 驱动（`data/rebocap_driver`）。我们不用 SteamVR，而且 20480 这个端口同一时间只能连一个程序，SteamVR 驱动连着的话 CLI 就连不上。
 
 Bottles、rebocap-wine、bridge.exe 都不需要。
 
-> 官方版執行時會把接收器從 `cdc_acm` 卸下來，直接用 USB 存取，所以這時 `/dev/ttyACM*` 和 `/dev/serial/by-id/...` 會消失。這是正常的，腳本改成直接找 USB 裝置 248a:8002。
+> 官方版运行时会把接收器从 `cdc_acm` 卸下来，直接用 USB 访问，所以这时 `/dev/ttyACM*` 和 `/dev/serial/by-id/...` 会消失。这是正常的，脚本改成直接找 USB 设备 248a:8002。
 
 ### 方案 B：Windows 版跑在 Wine（Bottles）
 
-#### B1. 接收器權限
+#### B1. 接收器权限
 
-使用者要在擁有 `/dev/ttyACM*` 的群組裡（Arch 是 `uucp`），重開機後才會持續有效：
+用户要在拥有 `/dev/ttyACM*` 的组里（Arch 是 `uucp`），重启后才会持续有效：
 
 ```sh
-sudo usermod -aG uucp "$USER"   # 執行後要重新登入
+sudo usermod -aG uucp "$USER"   # 运行后要重新登录
 ```
 
-我另外加了一條 udev 規則 `/etc/udev/rules.d/70-rebocap.rules`，可加可不加：
+我另外加了一条 udev 规则 `/etc/udev/rules.d/70-rebocap.rules`，可加可不加：
 
 ```
 SUBSYSTEM=="tty", ATTRS{idVendor}=="248a", ATTRS{idProduct}=="8002", MODE="0660", TAG+="uaccess"
 ```
 
-#### B2. Rebocap 裝進 Bottles
+#### B2. Rebocap 装进 Bottles
 
-1. Bottles 給予 `--device=all` 權限，Wine 才能存取序列埠。
-2. 建立 Bottle（我取名 `Rebocap`，win64），安裝 Rebocap。
-3. 套用 [rebocap-wine](https://github.com/TW527E/rebocap-wine) 的 setupapi 補丁，讓 Rebocap 能列舉到接收器。
-4. 在 Bottle 的 `dosdevices` 把接收器對應成 COM 埠，例如 `com33 -> /dev/ttyACM0`。
+1. 给 Bottles 设备访问权限，Wine 才能访问串口：`flatpak override --user --device=all com.usebottles.bottles`。
+2. 创建 Bottle（我取名 `Rebocap`，win64），安装 Rebocap。
+3. 套用 [rebocap-wine](https://github.com/TW527E/rebocap-wine) 的 setupapi 补丁，让 Rebocap 能枚举到接收器。
+4. 在 Bottle 的 `dosdevices` 把接收器映射成 COM 端口，例如 `com33 -> /dev/ttyACM0`。
 
 #### B3. bridge.exe
 
@@ -128,52 +130,52 @@ x86_64-w64-mingw32-gcc -O2 -static -o bridge.exe bridge/bridge.c -lws2_32   # �
 cp bridge.exe ~/.var/app/com.usebottles.bottles/data/bottles/bottles/Rebocap/drive_c/Program\ Files\ \(x86\)/Rebocap/
 ```
 
-不想自己編譯的話，可以從 fork 的 Releases 下載 `bridge.exe`。
+不想自己编译的话，可以从 [Releases](https://github.com/TW527E/rebocap-linux-compat/releases/latest) 下载 `bridge.exe`。
 
-**不需要**執行它的 `install.py`，也不用註冊 SteamVR 驅動。
+**不需要**运行它的 `install.py`，也不用注册 SteamVR 驱动。
 
-建議在 Bottles GUI 裡把 `bridge.exe` 加成這個 Bottle 的程式，方便日常啟動。
+建议在 Bottles GUI 里把 `bridge.exe` 加成这个 Bottle 的程序，方便日常启动。
 
-### （選用）右搖桿按下 = 跳躍
+### （选用）右摇杆按下 = 跳跃
 
-如果手把 A 鍵壞了，可以讓右搖桿按下也能跳。產生 xrizer 用的綁定檔：
+如果手柄 A 键坏了，可以让右摇杆按下也能跳。产生 xrizer 用的绑定文件：
 
 ```sh
-./xrizer-bindings/make-vrchat-bindings.py      # 寫到 ~/.config/xrizer-bindings/oculustouch.json
+./xrizer-bindings/make-vrchat-bindings.py      # 写到 ~/.config/xrizer-bindings/oculustouch.json
 ```
 
-然後在 VRChat 的 Steam 啟動選項最前面加上：
+然后在 VRChat 的 Steam 启动选项最前面加上：
 
 ```
 XRIZER_CUSTOM_BINDINGS_DIR=/home/<你>/.config/xrizer-bindings
 ```
 
-右搖桿原本的功能是「Udon Stick Click」，只有少數世界會用到。A 鍵照樣可以跳。VRChat 更新後重跑一次產生器即可。要恢復原狀，刪掉這個啟動選項就好。
+右摇杆原本的功能是「Udon Stick Click」，只有少数世界会用到。A 键照样可以跳。VRChat 更新后重跑一次生成器即可。要恢复原状，删掉这个启动选项就好。
 
-## 日常怎麼玩
+## 日常怎么玩
 
-**不玩全追**：照平常的方式就好，開 WiVRn → 頭顯連線 → 開 VRChat。不需要 Rebocap，也不需要腳本。
+**不玩全追**：照平常的方式就好，开 WiVRn → 头显连接 → 开 VRChat。不需要 Rebocap，也不需要脚本。
 
-**全身追蹤**，**順序很重要**：
+**全身追踪**，**顺序很重要**：
 
-1. 開 **WiVRn**（wivrn-dashboard），確認伺服器在執行。**頭顯先不要連。**
-2. 開 **Rebocap**：
-   - 方案 A：直接開官方 Linux 版。
-   - 方案 B：在 Bottles 開 Rebocap，再開 bridge.exe。
-3. 終端機執行：
+1. 开 **WiVRn**（wivrn-dashboard），确认服务器在运行。**头显先不要连。**
+2. 开 **Rebocap**：
+   - 方案 A：直接开官方 Linux 版。
+   - 方案 B：在 Bottles 开 Rebocap，再开 bridge.exe。
+3. 终端运行：
    ```sh
-   rebocap-fbt          # 10 點（預設）：腰、胸、雙大腿、雙小腿、雙腳、雙上臂。自動偵測方案
-   rebocap-fbt 12       # 12 點：10 點再加雙前臂
-   rebocap-fbt 6        # 6 點
-   rebocap-fbt 10 --usb # 準備好後自動用 USB 連頭顯
-   rebocap-fbt --wine   # 強制用方案 B（--native 是強制用方案 A）
+   rebocap-fbt          # 10 点（默认）：腰、胸、双大腿、双小腿、双脚、双上臂。自动检测方案
+   rebocap-fbt 12       # 12 点：10 点再加双前臂
+   rebocap-fbt 6        # 6 点
+   rebocap-fbt 10 --usb # 准备好后自动用 USB 连头显
+   rebocap-fbt --wine   # 强制用方案 B（--native 是强制用方案 A）
    ```
-   開頭會印出現在用的是哪個方案，例如 `模式：官方 Linux 版 Rebocap（127.0.0.1:20480）`。
-4. 看到「**SolarXR 準備好了**」（也會跳桌面通知）之後，**連頭顯**。
-5. Rebocap 切到 **VR 模式**，戴著頭顯**校準**。
-6. 從 Steam 開 **VRChat**，在快捷選單點 **Calibrate FBT**。
+   开头会输出现在用的是哪个方案，例如 `模式：官方 Linux 版 Rebocap（127.0.0.1:20480）`（脚本的输出是繁体中文）。
+4. 看到「**SolarXR 準備好了**」（也会跳桌面通知）之后，**连头显**。
+5. Rebocap 切到 **VR 模式**，戴着头显**校准**。
+6. 从 Steam 开 **VRChat**，在快捷菜单点 **Calibrate FBT**。
 
-腳本會顯示部位檢查：
+脚本会显示部位检查：
 
 ```
 有資料的部位：0 1 2 3 4 5 6 7 9 10
@@ -181,74 +183,89 @@ XRIZER_CUSTOM_BINDINGS_DIR=/home/<你>/.config/xrizer-bindings
   ⚠ 有資料但沒有發布：…
 ```
 
-出現 ⚠ 就代表部位參數和實際綁的追蹤器不一致，要修正部位參數。
+出现 ⚠ 就代表部位参数和实际绑的追踪器不一致，要修正部位参数。
 
-**結束**：
+**结束**：
 
-1. 在腳本的終端機按 **Ctrl+C**。腳本會關掉 CLI。方案 B 還會用 `bridge.quit` 讓 bridge 自己退出（加 `--keep-bridge` 就不關）。
-2. 關掉 **Rebocap** 視窗。
-3. WiVRn 照平常的方式處理。
+1. 在脚本的终端按 **Ctrl+C**。脚本会关掉 CLI。方案 B 还会用 `bridge.quit` 让 bridge 自己退出（加 `--keep-bridge` 就不关）。
+2. 关掉 **Rebocap** 窗口。
+3. WiVRn 照平常的方式处理。
 
-**重要**：重啟 CLI 或換了部位之後，頭顯要**重新連線**，VRChat 也要**重開**。WiVRn 只在頭顯連線時讀取追蹤器清單。
+**重要**：重启 CLI 或换了部位之后，头显要**重新连接**，VRChat 也要**重开**。WiVRn 只在头显连接时读取追踪器列表。
 
-### 部位編號
+### 部位编号
 
-| 編號 | 部位 | 編號 | 部位 |
+| 编号 | 部位 | 编号 | 部位 |
 |---|---|---|---|
 | 0 | 腰 | 7 | 胸 |
 | 1 / 2 | 左／右大腿 | 9 / 10 | 左／右上臂 |
 | 3 / 4 | 左／右小腿 | 11 / 12 | 左／右前臂 |
-| 5 / 6 | 左／右腳 | | |
+| 5 / 6 | 左／右脚 | | |
 
-VRChat 校準時是依追蹤器的**位置**分配給臀、腳、膝、胸、肘，所以 6 點套組的小腿追蹤器可以當成腳來用。
+VRChat 校准时是依追踪器的**位置**分配给臀、脚、膝、胸、肘，所以 6 点套件的小腿追踪器可以当成脚来用。
 
-CLI 預設的 `0,5,6` 只適合有綁腳的套組。6 點套組沒有腳的實體追蹤器，5、6 只是 Rebocap 建出的虛擬節點，只會送短暫的一點資料，用預設值的話 VRChat 會抓不到腳。
+CLI 默认的 `0,5,6` 只适合有绑脚的套件。6 点套件没有脚的实体追踪器，5、6 只是 Rebocap 建出的虚拟节点，只会送短暂的一点数据，用默认值的话 VRChat 会抓不到脚。
 
-### USB 連線
+### USB 连接
 
-1. 頭顯要開開發者模式，並允許這台電腦用 USB 偵錯。授權視窗會顯示在頭顯裡，要戴上才看得到。
-2. 執行 `adb devices`，狀態應該是 `device`。如果是 `unauthorized`，代表頭顯還沒按允許。
-3. 用 `rebocap-fbt --usb`，或在 wivrn-dashboard 按「透過 USB 連線」。
+1. 头显要开开发者模式，并允许这台电脑用 USB 调试。授权窗口会显示在头显里，要戴上才看得到。
+2. 运行 `adb devices`，状态应该是 `device`。如果是 `unauthorized`，代表头显还没按允许。
+3. 用 `rebocap-fbt --usb`，或在 wivrn-dashboard 按「通过 USB 连接」。
 
-手動的話：
+手动的话：
 
 ```sh
 adb reverse tcp:9757 tcp:9757
 adb shell am start -a android.intent.action.VIEW -d "wivrn+tcp://127.0.0.1:9757" org.meumeu.wivrn
 ```
 
-## 踩過的坑
+## 更新
 
-### 兩種方案都會遇到
+```sh
+cd ~/Projects/rebocap-wivrn-bridge && git pull && cargo build --release   # CLI
+cd ~/Projects/rebocap-linux-wivrn-fbt && git pull                         # 启动脚本（软链接会自动指向新版）
+```
 
-| 症狀 | 原因 | 解法 |
+官方 Linux 版 Rebocap 用安装目录里的 `maintenancetool` 更新，或下载新的安装包重装。
+
+## 延迟
+
+两个方案到 CLI 之前的差别很小：方案 A 少了 Wine 的 named pipe、bridge.exe 的轮询和 Wine 的串口模拟，大约省下 1～3 ms。
+比较大的差别在 CLI：原版 CLI 里追踪器姿态要在两个 10 ms 的轮询循环里排队，平均多约 10 ms、最多约 20 ms，更新间隔也忽长忽短。[TW527E/rebocap-wivrn-bridge](https://github.com/TW527E/rebocap-wivrn-bridge) 改成一收到就送给 WiVRn。
+
+## 踩过的坑
+
+### 两种方案都会遇到
+
+| 症状 | 原因 | 解法 |
 |---|---|---|
-| CLI：`Failed to connect to monado service process` | WiVRn 伺服器沒在跑（dashboard 開著不代表伺服器開著） | 在 dashboard 按「啟動伺服器」 |
-| CLI 找不到 WiVRn | 系統沒有 `active_runtime.json` | 加上 `XR_RUNTIME_JSON=/usr/share/openxr/1/openxr_wivrn.json`（腳本已自動加） |
-| CLI 顯示 `invalid SolarXR frame` 加上用法說明 | 部位參數裡混了全形標點（例如 `12。`） | 只用半形數字和逗號 |
-| VRChat 抓不到腳 | 部位參數和實際綁的追蹤器不一致 | 看腳本的部位檢查，修正部位參數 |
+| CLI：`Failed to connect to monado service process` | WiVRn 服务器没在跑（dashboard 开着不代表服务器开着） | 在 dashboard 按「启动服务器」 |
+| CLI 找不到 WiVRn | 系统没有 `active_runtime.json` | 加上 `XR_RUNTIME_JSON=/usr/share/openxr/1/openxr_wivrn.json`（脚本已自动加） |
+| CLI 显示 `invalid SolarXR frame` 加上用法说明 | 部位参数里混了全角标点（例如 `12。`） | 只用半角数字和逗号 |
+| VRChat 抓不到脚 | 部位参数和实际绑的追踪器不一致 | 看脚本的部位检查，修正部位参数 |
+| 拖动游玩区后追踪器偏离身体 | CLI 读不到 WiVRn 的 STAGE 偏移（log 有 `libmonado unavailable`） | 用 TW527E 的 CLI fork，并确认 WiVRn 的 runtime JSON 里有 `MND_libmonado_path` |
 
 ### 方案 A（官方 Linux 版）
 
-| 症狀 | 原因 | 解法 |
+| 症状 | 原因 | 解法 |
 |---|---|---|
-| 腳本說找不到接收器，但 Rebocap 認得到 | 官方版把接收器從 `cdc_acm` 卸下來直接用 USB，`/dev/ttyACM*` 會消失 | 腳本已改成找 USB 裝置 248a:8002 |
-| CLI 連上了但一直沒有資料 | Rebocap 還沒切 VR 模式，或正在更新韌體 | 等韌體更新完，切 VR 模式並校準 |
-| 腳本警告 20480 已經有程式連著 | 官方 SteamVR 驅動（或另一個 CLI）佔著，這個埠只收一個連線 | 關掉 SteamVR／另一個 CLI |
+| 脚本说找不到接收器，但 Rebocap 能识别 | 官方版把接收器从 `cdc_acm` 卸下来直接用 USB，`/dev/ttyACM*` 会消失 | 脚本已改成找 USB 设备 248a:8002 |
+| CLI 连上了但一直没有数据 | Rebocap 还没切 VR 模式，或正在更新固件 | 等固件更新完，切 VR 模式并校准 |
+| 脚本警告 20480 已经有程序连着 | 官方 SteamVR 驱动（或另一个 CLI）占着，这个端口只收一个连接 | 关掉 SteamVR／另一个 CLI |
 
 ### 方案 B（Wine／Bottles）
 
-詳細的除錯過程在 [docs/troubleshooting.md](docs/troubleshooting.md)。重點如下：
+详细的调试过程在 [docs/troubleshooting.md](docs/troubleshooting.md)（繁体中文）。重点如下：
 
-| 症狀 | 原因 | 解法 |
+| 症状 | 原因 | 解法 |
 |---|---|---|
-| bridge.exe 顯示 listening，但連進去永遠沒有反應 | 這個 Wine（soda-11.0-10 + ntsync）的阻塞式 socket 呼叫是壞的 | bridge 改用非阻塞 socket 加事件等待（fork 已修） |
-| 沒有腰的追蹤器、腳的資料斷斷續續、bridge 一直印 `0 bytes` | 讀 pipe 時回報 0 bytes，訊息被丟掉了 | 先用 `PeekNamedPipe` 確認有資料才讀（fork 已修） |
-| bridge CPU 很高、Rebocap 完全不回應 | pipe 的讀取一直處於等待，IO 狀態永遠不會更新 | 同上 |
-| 從終端機 `kill` bridge 後，Rebocap 當掉 | wineserver 在處理被殺的程序時 segfault | **永遠不要從主機 kill Wine 程序**，改用 `bridge.quit` |
-| Rebocap 顯示「網路校驗失敗，10 秒後退出」然後卡住 | wineserver 已經不在了，Wine 裡的網路全部失效 | 結束整個 Bottle 再重開。不是網路本身的問題 |
-| Bottles「停止」一直卡住 | bridge 是 console 程式，Rebocap 也不理會 Windows 的關機訊號 | 先 `bridge.quit`，再手動關 Rebocap 視窗 |
+| bridge.exe 显示 listening，但连进去永远没有反应 | 这个 Wine（soda-11.0-10 + ntsync）的阻塞式 socket 调用是坏的 | bridge 改用非阻塞 socket 加事件等待（fork 已修） |
+| 没有腰的追踪器、脚的数据断断续续、bridge 一直输出 `0 bytes` | 读 pipe 时返回 0 bytes，消息被丢掉了 | 先用 `PeekNamedPipe` 确认有数据才读（fork 已修） |
+| bridge CPU 很高、Rebocap 完全没反应 | pipe 的读取一直处于等待，IO 状态永远不会更新 | 同上 |
+| 从终端 `kill` bridge 后，Rebocap 崩溃 | wineserver 在处理被杀的进程时 segfault | **永远不要从主机 kill Wine 进程**，改用 `bridge.quit` |
+| Rebocap 显示「网络校验失败，10 秒后退出」然后卡住 | wineserver 已经不在了，Wine 里的网络全部失效 | 结束整个 Bottle 再重开。不是网络本身的问题 |
+| Bottles「停止」一直卡住 | bridge 是 console 程序，Rebocap 也不理会 Windows 的关机信号 | 先 `bridge.quit`，再手动关 Rebocap 窗口 |
 
-## 授權
+## 许可
 
-本 repo 的腳本和文件採用 MIT License。`bridge.exe` 的程式碼來自 dogesoulseller/rebocap-linux-compat（MIT）。CLI 由 akazdayo/rebocap-wivrn-bridge 開發（我的修改在 TW527E/rebocap-wivrn-bridge），本 repo 只放連結，不包含它的程式碼。Rebocap 是 JXQ 的專有軟體，本 repo 不包含它的任何檔案。
+本仓库的脚本和文档采用 MIT License。`bridge.exe` 的代码来自 dogesoulseller/rebocap-linux-compat（MIT）。CLI 由 akazdayo/rebocap-wivrn-bridge 开发（我的修改在 TW527E/rebocap-wivrn-bridge），本仓库只放链接，不包含它的代码。Rebocap 是 JXQ 的专有软件，本仓库不包含它的任何文件。
