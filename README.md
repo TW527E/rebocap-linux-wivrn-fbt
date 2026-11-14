@@ -82,7 +82,9 @@ cd ~/Projects/rebocap-wivrn-bridge && cargo build --release
 
 ```sh
 git clone https://github.com/TW527E/rebocap-linux-wivrn-fbt ~/Projects/rebocap-linux-wivrn-fbt
+mkdir -p ~/.local/bin
 ln -s ~/Projects/rebocap-linux-wivrn-fbt/scripts/rebocap-fbt ~/.local/bin/rebocap-fbt
+# ~/.local/bin 不在 PATH 时：echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 ```
 
 脚本会自动找 CLI（`monad2steamvr`），依次是：`REBOCAP_CLI`、`PATH`、跟这个仓库放在同一层的 `rebocap-wivrn-bridge`，以及 `~/Projects`、`~/Downloads`、`~/src`、`~/` 底下的 `rebocap-wivrn-bridge`。放在其他地方，或其他路径不同时，可以用环境变量覆盖：`REBOCAP_CLI`、`REBOCAP_BOTTLE`、`REBOCAP_RECEIVER`、`REBOCAP_XR_RUNTIME_JSON`。端口号可以用 `REBOCAP_NATIVE_PORT`（默认 20480）和 `REBOCAP_WINE_PORT`（默认 36850）改。
@@ -168,7 +170,7 @@ cp bridge.exe ~/.var/app/com.usebottles.bottles/data/bottles/bottles/Rebocap/dri
 如果手柄 A 键坏了，可以让右摇杆按下也能跳。产生 xrizer 用的绑定文件：
 
 ```sh
-./xrizer-bindings/make-vrchat-bindings.py      # 写到 ~/.config/xrizer-bindings/oculustouch.json
+~/Projects/rebocap-linux-wivrn-fbt/xrizer-bindings/make-vrchat-bindings.py      # 写到 ~/.config/xrizer-bindings/oculustouch.json
 ```
 
 然后在 VRChat 的 Steam 启动选项最前面加上：

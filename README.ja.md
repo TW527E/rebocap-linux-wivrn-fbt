@@ -88,7 +88,9 @@ cd ~/Projects/rebocap-wivrn-bridge && cargo build --release
 
 ```sh
 git clone https://github.com/TW527E/rebocap-linux-wivrn-fbt ~/Projects/rebocap-linux-wivrn-fbt
+mkdir -p ~/.local/bin
 ln -s ~/Projects/rebocap-linux-wivrn-fbt/scripts/rebocap-fbt ~/.local/bin/rebocap-fbt
+# ~/.local/bin が PATH にない場合：echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 ```
 
 スクリプトは CLI（`monad2steamvr`）を次の順で探します：`REBOCAP_CLI`、`PATH`、このリポジトリと同じ階層の `rebocap-wivrn-bridge`、
@@ -187,7 +189,7 @@ Bottles の GUI で `bridge.exe` をそのボトルのプログラムとして�
 コントローラーの A ボタンが壊れている場合、右スティックの押し込みでもジャンプできるようにできます。xrizer 用の割り当てファイルを生成します。
 
 ```sh
-./xrizer-bindings/make-vrchat-bindings.py      # ~/.config/xrizer-bindings/oculustouch.json に書き込み
+~/Projects/rebocap-linux-wivrn-fbt/xrizer-bindings/make-vrchat-bindings.py      # ~/.config/xrizer-bindings/oculustouch.json に書き込み
 ```
 
 そして VRChat の Steam 起動オプションの先頭に次を追加します。
