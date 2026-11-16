@@ -92,7 +92,9 @@ cd ~/Projects/rebocap-wivrn-bridge && cargo build --release
 
 ```sh
 git clone https://github.com/TW527E/rebocap-linux-wivrn-fbt ~/Projects/rebocap-linux-wivrn-fbt
+mkdir -p ~/.local/bin
 ln -s ~/Projects/rebocap-linux-wivrn-fbt/scripts/rebocap-fbt ~/.local/bin/rebocap-fbt
+# If ~/.local/bin is not on PATH: echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 ```
 
 The launcher finds the CLI (`monad2steamvr`) in this order: `REBOCAP_CLI`, `PATH`, a `rebocap-wivrn-bridge` next to
@@ -196,7 +198,7 @@ I haven't done or tested any of this; these are only ideas. Feel free to try, an
 If your controller's A button is broken, you can make a right stick click jump too. Generate xrizer bindings:
 
 ```sh
-./xrizer-bindings/make-vrchat-bindings.py      # writes ~/.config/xrizer-bindings/oculustouch.json
+~/Projects/rebocap-linux-wivrn-fbt/xrizer-bindings/make-vrchat-bindings.py      # writes ~/.config/xrizer-bindings/oculustouch.json
 ```
 
 Then put this at the very start of VRChat's Steam launch options:

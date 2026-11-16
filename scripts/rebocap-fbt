@@ -177,7 +177,8 @@ fi
 
 mkdir -p "$LOG_DIR"
 log="$LOG_DIR/cli-$(date +%Y%m%d-%H%M%S).log"
-ls -1t "$LOG_DIR"/cli-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f # keep the last 10 logs
+# Keep the last 10 logs. Names sort by time; NUL separators keep paths with spaces or quotes intact.
+find "$LOG_DIR" -maxdepth 1 -type f -name 'cli-*.log' -print0 | sort -zr | tail -zn +11 | xargs -0r rm -f --
 
 case $mode in
     native) say "模式：官方 Linux 版 Rebocap（127.0.0.1:$BRIDGE_PORT）" ;;
@@ -190,31 +191,46 @@ say "完整 log：$log"
 
 # Prints a line whenever the set of roles that actually stream poses changes.
 MONITOR='
-import json, sys, time
+import json, os, select, sys, time
 published = set(int(r) for r in sys.argv[1].split(","))
-window, counts, start, last, seen = 5.0, {}, time.time(), None, False
-for line in sys.stdin:
-    try:
-        d = json.loads(line)
-    except ValueError:
-        continue
-    if d.get("device") == "tracker" and d.get("pose") and d.get("role") is not None:
-        counts[d["role"]] = counts.get(d["role"], 0) + 1
-        seen = True
-    now = time.time()
-    if now - start < window:
-        continue
-    if seen:
-        live = {r for r, c in counts.items() if c >= window * 5}
-        msg = "有資料的部位：" + (" ".join(map(str, sorted(live))) or "（無，Rebocap 是否在 VR 模式並已校準？）")
-        if published - live:
-            msg += "\n  ⚠ 已發布但沒有資料：" + " ".join(map(str, sorted(published - live)))
-        if live - published:
-            msg += "\n  ⚠ 有資料但沒有發布：" + " ".join(map(str, sorted(live - published)))
-        if msg != last:
-            print("\033[1;36m[rebocap-fbt]\033[0m " + msg, flush=True)
-            last = msg
+window, counts, start, last = 5.0, {}, time.time(), None
+fd, buf = sys.stdin.fileno(), b""
+
+def report(now):
+    global counts, start, last
+    live = {r for r, c in counts.items() if c >= window * 5}
+    if live:
+        msg = "有資料的部位：" + " ".join(map(str, sorted(live)))
+    else:
+        msg = "有資料的部位：（無，Rebocap 是否在 VR 模式並已校準？）"
+    if published - live:
+        msg += "\n  ⚠ 已發布但沒有資料：" + " ".join(map(str, sorted(published - live)))
+    if live - published:
+        msg += "\n  ⚠ 有資料但沒有發布：" + " ".join(map(str, sorted(live - published)))
+    if msg != last:
+        print("\033[1;36m[rebocap-fbt]\033[0m " + msg, flush=True)
+        last = msg
     counts, start = {}, now
+
+# Wake up every second, so the status also updates when no tracker data arrives at all.
+while True:
+    ready, _, _ = select.select([fd], [], [], 1.0)
+    if ready:
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            break
+        buf += chunk
+        *lines, buf = buf.split(b"\n")
+        for line in lines:
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(d, dict) and d.get("device") == "tracker" and d.get("pose") and d.get("role") is not None:
+                counts[d["role"]] = counts.get(d["role"], 0) + 1
+    now = time.time()
+    if now - start >= window:
+        report(now)
 '
 
 on_ready() {
